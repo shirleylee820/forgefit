@@ -460,7 +460,6 @@ export default function FitnessApp() {
   const [currentWeek, setCurrentWeek]   = useState(1);
   const [completedWorkouts, setCompleted] = useState(new Set());
   const [recipeOpen, setRecipeOpen]     = useState(null); // index of meal with open recipe
-  const [expandedMeal, setExpandedMeal] = useState(null);
 
   const g       = GOALS[goal];
   const workouts = WORKOUTS[goal][currentWeek];
