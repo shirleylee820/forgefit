@@ -449,15 +449,6 @@ const MEALS = {
   },
 };
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const intensityColor = { "Low":"#00C896","Med":"#4F8EF7","Medium":"#4F8EF7","Mixed":"#A259FF","High":"#FF6B35","Very High":"#FF2D55","Max":"#FF2D55","–":"#444" };
-const typeIcon = { "Weights":"🏋️","Cardio":"🏃","Hyrox":"⚡","Active Rest":"🧘","Rest":"😴" };
-
-export default function FitnessApp() {
-  const [goal, setGoal]           = useState("weightLoss");
-  const [activeTab, setActiveTab] = useState("overview");
-  const [selectedDay, setSelectedDay]   = useState(0);
-  const [currentWeek, setCurrentWeek]   = useState(1);
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const intensityColor = { "Low":"#00C896","Med":"#4F8EF7","Medium":"#4F8EF7","Mixed":"#A259FF","High":"#FF6B35","Very High":"#FF2D55","Max":"#FF2D55","–":"#444" };
