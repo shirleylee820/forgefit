@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ─── GOALS ───────────────────────────────────────────────────────────────────
 const GOALS = {
@@ -458,17 +458,40 @@ export default function FitnessApp() {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedDay, setSelectedDay]   = useState(0);
   const [currentWeek, setCurrentWeek]   = useState(1);
-  const [completedWorkouts, setCompleted] = useState(new Set());
-  const [recipeOpen, setRecipeOpen]     = useState(null); // index of meal with open recipe
 
-  const g       = GOALS[goal];
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const intensityColor = { "Low":"#00C896","Med":"#4F8EF7","Medium":"#4F8EF7","Mixed":"#A259FF","High":"#FF6B35","Very High":"#FF2D55","Max":"#FF2D55","–":"#444" };
+const typeIcon = { "Weights":"🏋️","Cardio":"🏃","Hyrox":"⚡","Active Rest":"🧘","Rest":"😴" };
+
+// ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
+function useBreakpoint() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setW(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  });
+  return { isMobile: w < 640, isTablet: w >= 640 && w < 1024, isDesktop: w >= 1024, w };
+}
+
+export default function FitnessApp() {
+  const [goal, setGoal]           = useState("weightLoss");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedDay, setSelectedDay]   = useState(0);
+  const [currentWeek, setCurrentWeek]   = useState(1);
+  const [completedWorkouts, setCompleted] = useState(new Set());
+  const [recipeOpen, setRecipeOpen]     = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isMobile, isTablet } = useBreakpoint();
+
+  const g        = GOALS[goal];
   const workouts = WORKOUTS[goal][currentWeek];
   const meals    = MEALS[goal][currentWeek];
   const weeklyBurn = workouts.reduce((s,w)=>s+w.calories,0);
   const completedCount = completedWorkouts.size;
   const progressPct = Math.round((completedCount/28)*100);
 
-  const changeGoal = (ng) => { setGoal(ng); setCompleted(new Set()); };
+  const changeGoal = (ng) => { setGoal(ng); setCompleted(new Set()); setMobileMenuOpen(false); };
   const toggleWorkout = (key) => {
     setCompleted(prev=>{ const n=new Set(prev); n.has(key)?n.delete(key):n.add(key); return n; });
   };
@@ -477,103 +500,185 @@ export default function FitnessApp() {
   const totalCal  = meals.reduce((s,m)=>s+m.calories,0);
   const totalProt = meals.reduce((s,m)=>s+m.protein,0);
 
+  const px = isMobile ? "12px" : "24px";
+
   return (
     <div style={{ minHeight:"100vh", background:"#080810", fontFamily:"'DM Sans','Helvetica Neue',sans-serif", color:"#EEEEF5", overflowX:"hidden" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Bebas+Neue&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=Bebas+Neue&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
+        html{-webkit-text-size-adjust:100%}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
-        .btn{transition:all .18s ease;cursor:pointer}
-        .btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+        .btn{transition:all .18s ease;cursor:pointer;-webkit-tap-highlight-color:transparent}
+        .btn:active{opacity:0.8;transform:scale(0.97)}
+        @media(hover:hover){.btn:hover{filter:brightness(1.15);transform:translateY(-1px)}}
         .card{transition:transform .2s ease}
-        .card:hover{transform:translateY(-2px)}
+        @media(hover:hover){.card:hover{transform:translateY(-2px)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         .fade{animation:fadeUp .35s ease forwards}
-        @keyframes shimmer{0%,100%{opacity:.6}50%{opacity:1}}
-        .shimmer{animation:shimmer 2s infinite}
         .recipe-panel{animation:fadeUp .25s ease forwards}
+        /* Bottom nav active indicator */
+        .tab-active{color:#fff!important}
       `}</style>
 
-      {/* HEADER */}
-      <div style={{ background:"#0C0C18", borderBottom:"1px solid #1A1A2E", padding:"16px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:200, backdropFilter:"blur(24px)" }}>
+      {/* ── HEADER ── */}
+      <div style={{
+        background:"#0C0C18",
+        borderBottom:"1px solid #1A1A2E",
+        padding: isMobile ? "12px 16px" : "16px 28px",
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        position:"sticky", top:0, zIndex:200, backdropFilter:"blur(24px)"
+      }}>
         <div>
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:3, lineHeight:1 }}>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize: isMobile ? 22 : 28, letterSpacing:3, lineHeight:1 }}>
             <span style={{ color:g.color }}>FORGE</span><span>FIT</span>
           </div>
-          <div style={{ fontSize:10, color:"#555", letterSpacing:"3px", textTransform:"uppercase", marginTop:1 }}>4-Week Programme</div>
+          <div style={{ fontSize:9, color:"#555", letterSpacing:"2px", textTransform:"uppercase", marginTop:1 }}>4-Week Programme</div>
         </div>
-        {/* Goal pills */}
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+
+        {/* Desktop: goal pills inline */}
+        {!isMobile && (
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+            {Object.entries(GOALS).map(([k,v])=>(
+              <button key={k} onClick={()=>changeGoal(k)} className="btn" style={{
+                padding:"6px 14px", borderRadius:20,
+                border:`1.5px solid ${goal===k?v.color:"#222"}`,
+                background:goal===k?`${v.color}22`:"transparent",
+                color:goal===k?v.color:"#666", fontSize:12, fontWeight:600
+              }}>{v.icon} {v.label}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile: hamburger to open goal selector */}
+        {isMobile && (
+          <button onClick={()=>setMobileMenuOpen(!mobileMenuOpen)} className="btn" style={{
+            background:"#11111E", border:"1px solid #1A1A2E", borderRadius:10,
+            padding:"8px 12px", color:g.color, fontSize:13, fontWeight:700
+          }}>
+            {g.icon} Goal {mobileMenuOpen ? "▲" : "▼"}
+          </button>
+        )}
+      </div>
+
+      {/* Mobile goal dropdown */}
+      {isMobile && mobileMenuOpen && (
+        <div style={{
+          background:"#0C0C18", borderBottom:"1px solid #1A1A2E",
+          padding:"12px 16px", display:"flex", flexDirection:"column", gap:8, zIndex:150, position:"relative"
+        }}>
           {Object.entries(GOALS).map(([k,v])=>(
-            <button key={k} onClick={()=>changeGoal(k)} className="btn" style={{ padding:"6px 16px", borderRadius:20, border:`1.5px solid ${goal===k?v.color:"#222"}`, background:goal===k?`${v.color}22`:"transparent", color:goal===k?v.color:"#666", fontSize:12, fontWeight:600 }}>
-              {v.icon} {v.label}
+            <button key={k} onClick={()=>changeGoal(k)} className="btn" style={{
+              padding:"12px 16px", borderRadius:12, textAlign:"left",
+              border:`1.5px solid ${goal===k?v.color:"#1A1A2E"}`,
+              background:goal===k?`${v.color}18`:"#11111E",
+              color:goal===k?v.color:"#aaa", fontSize:14, fontWeight:600,
+              display:"flex", alignItems:"center", gap:10
+            }}>
+              <span style={{ fontSize:20 }}>{v.icon}</span>
+              <div>
+                <div>{v.label}</div>
+                <div style={{ fontSize:11, color:"#666", fontWeight:400, marginTop:1 }}>{v.description}</div>
+              </div>
             </button>
           ))}
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth:1140, margin:"0 auto", padding:"0 24px 60px" }}>
+      {/* ── MAIN CONTENT ── */}
+      <div style={{ maxWidth:1140, margin:"0 auto", padding:`0 ${px} ${isMobile?"80px":"60px"}` }}>
 
-        {/* STATS */}
-        <div className="fade" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginTop:28 }}>
+        {/* STATS GRID */}
+        <div className="fade" style={{
+          display:"grid",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)",
+          gap: isMobile ? 10 : 14,
+          marginTop: isMobile ? 16 : 28
+        }}>
           {[
-            { label:"Daily Target",   val:g.calories.toLocaleString(), sub:"kcal", icon:"🔥" },
-            { label:"Daily Protein",  val:`${g.protein}g`,            sub:"target", icon:"🥩" },
-            { label:"Weekly Burn",    val:weeklyBurn.toLocaleString(), sub:"kcal/week", icon:"⚡" },
-            { label:"Programme",      val:`${progressPct}%`,          sub:`${completedCount}/28 done`, icon:"📈" },
+            { label:"Daily Target",  val:g.calories.toLocaleString(), sub:"kcal", icon:"🔥" },
+            { label:"Daily Protein", val:`${g.protein}g`,             sub:"target", icon:"🥩" },
+            { label:"Weekly Burn",   val:weeklyBurn.toLocaleString(),  sub:"kcal/week", icon:"⚡" },
+            { label:"Programme",     val:`${progressPct}%`,           sub:`${completedCount}/28`, icon:"📈" },
           ].map((s,i)=>(
-            <div key={i} className="card" style={{ background:"linear-gradient(135deg,#11111E,#0D0D18)", border:"1px solid #1A1A2E", borderRadius:16, padding:"18px 20px" }}>
-              <div style={{ fontSize:22, marginBottom:8 }}>{s.icon}</div>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:30, color:g.color, letterSpacing:1 }}>{s.val}</div>
-              <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:"1px", marginTop:1 }}>{s.sub}</div>
-              <div style={{ fontSize:13, color:"#aaa", marginTop:3 }}>{s.label}</div>
+            <div key={i} style={{
+              background:"linear-gradient(135deg,#11111E,#0D0D18)",
+              border:"1px solid #1A1A2E", borderRadius:14,
+              padding: isMobile ? "14px" : "18px 20px"
+            }}>
+              <div style={{ fontSize: isMobile ? 18 : 22, marginBottom:6 }}>{s.icon}</div>
+              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize: isMobile ? 22 : 28, color:g.color, letterSpacing:1 }}>{s.val}</div>
+              <div style={{ fontSize:9, color:"#555", textTransform:"uppercase", letterSpacing:"1px", marginTop:1 }}>{s.sub}</div>
+              <div style={{ fontSize: isMobile ? 11 : 13, color:"#aaa", marginTop:2 }}>{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* WEEK SELECTOR + TABS */}
-        <div style={{ display:"flex", alignItems:"center", gap:16, marginTop:26, flexWrap:"wrap" }}>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:11, color:"#555", letterSpacing:"2px" }}>WEEK</span>
-            {[1,2,3,4].map(w=>(
-              <button key={w} onClick={()=>setCurrentWeek(w)} className="btn" style={{ width:38, height:38, borderRadius:10, border:`2px solid ${currentWeek===w?g.color:"#1A1A2E"}`, background:currentWeek===w?`${g.color}22`:"#11111E", color:currentWeek===w?g.color:"#666", fontWeight:700, fontSize:14 }}>{w}</button>
-            ))}
-          </div>
-          <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:30, padding:"5px 16px", fontSize:12, color:"#666", marginLeft:"auto" }}>
-            <span style={{ color:g.color, fontWeight:700 }}>{completedCount}</span> sessions completed
+        {/* WEEK SELECTOR */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop: isMobile ? 14 : 22, flexWrap:"wrap" }}>
+          <span style={{ fontSize:10, color:"#555", letterSpacing:"2px" }}>WEEK</span>
+          {[1,2,3,4].map(w=>(
+            <button key={w} onClick={()=>setCurrentWeek(w)} className="btn" style={{
+              width: isMobile ? 34 : 38, height: isMobile ? 34 : 38,
+              borderRadius:10,
+              border:`2px solid ${currentWeek===w?g.color:"#1A1A2E"}`,
+              background:currentWeek===w?`${g.color}22`:"#11111E",
+              color:currentWeek===w?g.color:"#666",
+              fontWeight:700, fontSize:13
+            }}>{w}</button>
+          ))}
+          <div style={{
+            marginLeft:"auto", background:"#11111E", border:"1px solid #1A1A2E",
+            borderRadius:30, padding:"4px 12px", fontSize:11, color:"#666"
+          }}>
+            <span style={{ color:g.color, fontWeight:700 }}>{completedCount}</span> done
           </div>
         </div>
 
-        {/* TABS */}
-        <div style={{ display:"flex", gap:4, marginTop:18, background:"#11111E", borderRadius:12, padding:4, width:"fit-content", border:"1px solid #1A1A2E" }}>
-          {[["overview","📋 Overview"],["workouts","🏋️ Workouts"],["meals","🥗 Meal Plan"]].map(([t,l])=>(
-            <button key={t} onClick={()=>setActiveTab(t)} className="btn" style={{ padding:"8px 22px", borderRadius:8, border:"none", background:activeTab===t?g.color:"transparent", color:activeTab===t?"#fff":"#666", fontSize:13, fontWeight:600 }}>{l}</button>
-          ))}
-        </div>
+        {/* TABS — desktop inline, mobile hidden (bottom nav instead) */}
+        {!isMobile && (
+          <div style={{ display:"flex", gap:4, marginTop:16, background:"#11111E", borderRadius:12, padding:4, width:"fit-content", border:"1px solid #1A1A2E" }}>
+            {[["overview","📋 Overview"],["workouts","🏋️ Workouts"],["meals","🥗 Meal Plan"]].map(([t,l])=>(
+              <button key={t} onClick={()=>setActiveTab(t)} className="btn" style={{
+                padding:"8px 22px", borderRadius:8, border:"none",
+                background:activeTab===t?g.color:"transparent",
+                color:activeTab===t?"#fff":"#666", fontSize:13, fontWeight:600
+              }}>{l}</button>
+            ))}
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {activeTab==="overview" && (
-          <div className="fade" style={{ marginTop:22, display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+          <div className="fade" style={{
+            marginTop: isMobile ? 14 : 22,
+            display:"grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+            gap: isMobile ? 12 : 16
+          }}>
             {/* Goal card */}
-            <div style={{ background:`linear-gradient(135deg,${g.color}18,${g.color}06)`, border:`1px solid ${g.color}44`, borderRadius:16, padding:26 }}>
-              <div style={{ fontSize:46, marginBottom:10 }}>{g.icon}</div>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color:g.color, letterSpacing:2 }}>{g.label}</div>
-              <div style={{ color:"#aaa", fontSize:14, marginTop:4 }}>{g.description}</div>
-              <div style={{ display:"flex", gap:24, marginTop:20 }}>
-                <div><div style={{ fontSize:22, fontWeight:700 }}>{g.calories}</div><div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>kcal/day</div></div>
-                <div><div style={{ fontSize:22, fontWeight:700 }}>{g.protein}g</div><div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>protein/day</div></div>
-                <div><div style={{ fontSize:22, fontWeight:700 }}>{weeklyBurn}</div><div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>kcal/week burn</div></div>
+            <div style={{ background:`linear-gradient(135deg,${g.color}18,${g.color}06)`, border:`1px solid ${g.color}44`, borderRadius:16, padding: isMobile ? 18 : 26 }}>
+              <div style={{ fontSize: isMobile ? 36 : 46, marginBottom:8 }}>{g.icon}</div>
+              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize: isMobile ? 24 : 28, color:g.color, letterSpacing:2 }}>{g.label}</div>
+              <div style={{ color:"#aaa", fontSize: isMobile ? 13 : 14, marginTop:4 }}>{g.description}</div>
+              <div style={{ display:"flex", gap: isMobile ? 16 : 24, marginTop:16, flexWrap:"wrap" }}>
+                {[{v:g.calories,u:"kcal/day"},{v:`${g.protein}g`,u:"protein/day"},{v:weeklyBurn,u:"kcal burn/wk"}].map((s,i)=>(
+                  <div key={i}>
+                    <div style={{ fontSize: isMobile ? 18 : 22, fontWeight:700 }}>{s.v}</div>
+                    <div style={{ fontSize:9, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{s.u}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Progress */}
-            <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding:26 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:1, marginBottom:18 }}>Programme Progress</div>
+            <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding: isMobile ? 18 : 26 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Programme Progress</div>
               {[1,2,3,4].map(w=>{
-                const wc = [...completedWorkouts].filter(k=>k.startsWith(`w${w}`)).length;
+                const wc=[...completedWorkouts].filter(k=>k.startsWith(`w${w}`)).length;
                 return (
-                  <div key={w} style={{ marginBottom:16 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                  <div key={w} style={{ marginBottom:14 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
                       <span style={{ fontSize:12, color:currentWeek===w?g.color:"#888", fontWeight:currentWeek===w?700:400 }}>Week {w}</span>
                       <span style={{ fontSize:12, color:"#555" }}>{wc}/7</span>
                     </div>
@@ -586,18 +691,21 @@ export default function FitnessApp() {
             </div>
 
             {/* Week at a glance */}
-            <div style={{ gridColumn:"1/-1", background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding:24 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:1, marginBottom:18 }}>Week {currentWeek} at a Glance</div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:10 }}>
+            <div style={{ gridColumn: isMobile ? "1" : "1/-1", background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding: isMobile ? 16 : 24 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:1, marginBottom:14 }}>Week {currentWeek} at a Glance</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap: isMobile ? 6 : 10 }}>
                 {workouts.map((w,i)=>{
                   const key=`w${currentWeek}d${i}`;
                   const done=completedWorkouts.has(key);
                   return (
-                    <div key={i} onClick={()=>{setSelectedDay(i);setActiveTab("workouts");}} className="card btn" style={{ background:done?`${g.color}22`:"#0D0D18", border:`1.5px solid ${done?g.color:"#1A1A2E"}`, borderRadius:12, padding:"14px 8px", textAlign:"center" }}>
-                      <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{w.day}</div>
-                      <div style={{ fontSize:24, margin:"8px 0" }}>{done?"✅":typeIcon[w.type]}</div>
-                      <div style={{ fontSize:10, color:"#aaa", fontWeight:600 }}>{w.type}</div>
-                      <div style={{ fontSize:9, color:"#555", marginTop:3 }}>{w.duration}</div>
+                    <div key={i} onClick={()=>{setSelectedDay(i);setActiveTab("workouts");}} className="btn" style={{
+                      background:done?`${g.color}22`:"#0D0D18",
+                      border:`1.5px solid ${done?g.color:"#1A1A2E"}`,
+                      borderRadius:10, padding: isMobile ? "10px 4px" : "14px 8px", textAlign:"center"
+                    }}>
+                      <div style={{ fontSize:9, color:"#555", textTransform:"uppercase", letterSpacing:0.5 }}>{w.day}</div>
+                      <div style={{ fontSize: isMobile ? 18 : 22, margin:"6px 0" }}>{done?"✅":typeIcon[w.type]}</div>
+                      <div style={{ fontSize: isMobile ? 8 : 10, color:"#aaa", fontWeight:600, lineHeight:1.2 }}>{w.type}</div>
                     </div>
                   );
                 })}
@@ -608,57 +716,77 @@ export default function FitnessApp() {
 
         {/* ── WORKOUTS ── */}
         {activeTab==="workouts" && (
-          <div className="fade" style={{ marginTop:22, display:"grid", gridTemplateColumns:"250px 1fr", gap:16 }}>
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div className="fade" style={{ marginTop: isMobile ? 14 : 22 }}>
+            {/* Day selector — horizontal scroll on mobile */}
+            <div style={{
+              display:"flex", gap:8, overflowX:"auto", paddingBottom:8,
+              scrollbarWidth:"none", WebkitOverflowScrolling:"touch",
+              marginBottom:14
+            }}>
               {workouts.map((w,i)=>{
                 const key=`w${currentWeek}d${i}`;
                 const done=completedWorkouts.has(key);
                 const sel=selectedDay===i;
                 return (
-                  <div key={i} onClick={()=>setSelectedDay(i)} className="btn" style={{ background:sel?`${g.color}22`:"#11111E", border:`1.5px solid ${sel?g.color:done?`${g.color}44`:"#1A1A2E"}`, borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"center", gap:12 }}>
-                    <span style={{ fontSize:18 }}>{done?"✅":typeIcon[w.type]}</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:600, color:sel?g.color:"#ddd" }}>{w.day} — {w.name}</div>
-                      <div style={{ fontSize:10, color:"#555", marginTop:2 }}>{w.duration} · {w.type}</div>
+                  <button key={i} onClick={()=>setSelectedDay(i)} className="btn" style={{
+                    flexShrink:0,
+                    background:sel?`${g.color}22`:"#11111E",
+                    border:`1.5px solid ${sel?g.color:done?`${g.color}44`:"#1A1A2E"}`,
+                    borderRadius:12, padding:"10px 14px",
+                    display:"flex", flexDirection: isMobile ? "column" : "row",
+                    alignItems:"center", gap: isMobile ? 4 : 10,
+                    minWidth: isMobile ? 72 : "auto"
+                  }}>
+                    <span style={{ fontSize: isMobile ? 20 : 16 }}>{done?"✅":typeIcon[w.type]}</span>
+                    <div style={{ textAlign: isMobile ? "center" : "left" }}>
+                      <div style={{ fontSize: isMobile ? 10 : 12, fontWeight:600, color:sel?g.color:"#ddd", whiteSpace:"nowrap" }}>{w.day}</div>
+                      <div style={{ fontSize:9, color:"#555", marginTop:1 }}>{w.type}</div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
 
-            <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding:28 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+            {/* Workout detail */}
+            <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding: isMobile ? 18 : 28 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:10 }}>
                 <div>
                   <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:"2px" }}>Week {currentWeek} · {currentWorkout.day}</div>
-                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:32, letterSpacing:2, marginTop:4 }}>
+                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize: isMobile ? 22 : 30, letterSpacing:2, marginTop:4, lineHeight:1.1 }}>
                     {typeIcon[currentWorkout.type]} {currentWorkout.name}
                   </div>
                 </div>
-                <button onClick={()=>toggleWorkout(`w${currentWeek}d${selectedDay}`)} className="btn" style={{ padding:"10px 22px", borderRadius:10, border:"none", background:completedWorkouts.has(`w${currentWeek}d${selectedDay}`)?`${g.color}44`:g.color, color:"#fff", fontSize:13, fontWeight:700 }}>
-                  {completedWorkouts.has(`w${currentWeek}d${selectedDay}`)?"✅ Completed":"Mark Complete"}
+                <button onClick={()=>toggleWorkout(`w${currentWeek}d${selectedDay}`)} className="btn" style={{
+                  padding: isMobile ? "10px 16px" : "10px 22px",
+                  borderRadius:10, border:"none",
+                  background:completedWorkouts.has(`w${currentWeek}d${selectedDay}`)?`${g.color}44`:g.color,
+                  color:"#fff", fontSize: isMobile ? 12 : 13, fontWeight:700, whiteSpace:"nowrap"
+                }}>
+                  {completedWorkouts.has(`w${currentWeek}d${selectedDay}`)?"✅ Done":"Mark Complete"}
                 </button>
               </div>
 
-              <div style={{ display:"flex", gap:12, marginBottom:24 }}>
+              {/* Stats row */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap: isMobile ? 8 : 12, marginBottom:20 }}>
                 {[
                   { label:"Duration",  val:currentWorkout.duration },
                   { label:"Intensity", val:currentWorkout.intensity, col:intensityColor[currentWorkout.intensity] },
-                  { label:"Est. Burn", val:currentWorkout.calories?`${currentWorkout.calories} kcal`:"–" },
+                  { label:"Burn",      val:currentWorkout.calories?`${currentWorkout.calories}`:"–", suffix:currentWorkout.calories?" kcal":"" },
                   { label:"Type",      val:currentWorkout.type },
                 ].map((s,i)=>(
-                  <div key={i} style={{ background:"#0D0D18", border:"1px solid #1A1A2E", borderRadius:10, padding:"10px 14px", flex:1 }}>
-                    <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{s.label}</div>
-                    <div style={{ fontSize:14, fontWeight:700, color:s.col||"#fff", marginTop:4 }}>{s.val}</div>
+                  <div key={i} style={{ background:"#0D0D18", border:"1px solid #1A1A2E", borderRadius:10, padding: isMobile ? "10px 8px" : "10px 14px", textAlign: isMobile ? "center" : "left" }}>
+                    <div style={{ fontSize:9, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{s.label}</div>
+                    <div style={{ fontSize: isMobile ? 11 : 13, fontWeight:700, color:s.col||"#fff", marginTop:4, lineHeight:1.2 }}>{s.val}{s.suffix||""}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ fontSize:11, color:"#555", textTransform:"uppercase", letterSpacing:"2px", marginBottom:12 }}>Exercises</div>
+              <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:"2px", marginBottom:10 }}>Exercises</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {currentWorkout.exercises.map((ex,i)=>(
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:14, padding:"11px 16px", background:"#0D0D18", borderRadius:10, border:"1px solid #1A1A2E" }}>
-                    <div style={{ width:26, height:26, borderRadius:7, background:`${g.color}22`, color:g.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>{i+1}</div>
-                    <div style={{ fontSize:13, color:"#ddd" }}>{ex}</div>
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding: isMobile ? "10px 12px" : "11px 16px", background:"#0D0D18", borderRadius:10, border:"1px solid #1A1A2E" }}>
+                    <div style={{ width:24, height:24, borderRadius:7, background:`${g.color}22`, color:g.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0 }}>{i+1}</div>
+                    <div style={{ fontSize: isMobile ? 12 : 13, color:"#ddd" }}>{ex}</div>
                   </div>
                 ))}
               </div>
@@ -668,97 +796,103 @@ export default function FitnessApp() {
 
         {/* ── MEALS ── */}
         {activeTab==="meals" && (
-          <div className="fade" style={{ marginTop:22 }}>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:16 }}>
-              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div className="fade" style={{ marginTop: isMobile ? 14 : 22 }}>
+            <div style={{
+              display:"grid",
+              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr" : "1fr 280px",
+              gap: isMobile ? 12 : 16
+            }}>
+              <div style={{ display:"flex", flexDirection:"column", gap: isMobile ? 10 : 14 }}>
                 {meals.map((meal,i)=>(
-                  <div key={i}>
-                    {/* Meal Row */}
-                    <div className="card" style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding:"18px 22px" }}>
-                      <div style={{ display:"grid", gridTemplateColumns:"110px 1fr auto", gap:12, alignItems:"start" }}>
-                        <div>
-                          <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{meal.meal}</div>
-                          <div style={{ fontSize:12, color:g.color, fontWeight:600, marginTop:2 }}>{meal.time}</div>
+                  <div key={i} style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding: isMobile ? "14px" : "18px 22px" }}>
+                    {/* Meal header */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                          <span style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{meal.meal}</span>
+                          <span style={{ fontSize:11, color:g.color, fontWeight:600 }}>{meal.time}</span>
                         </div>
-                        <div>
-                          <div style={{ fontSize:15, fontWeight:700, color:"#fff", marginBottom:8 }}>{meal.name}</div>
-                          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                            {meal.items.map((it,j)=>(
-                              <span key={j} style={{ padding:"3px 10px", background:"#0D0D18", border:"1px solid #1A1A2E", borderRadius:20, fontSize:11, color:"#aaa" }}>{it}</span>
-                            ))}
-                          </div>
-                        </div>
-                        <div style={{ textAlign:"right", minWidth:70 }}>
-                          <div style={{ fontSize:18, fontWeight:700, color:g.color }}>{meal.calories}</div>
-                          <div style={{ fontSize:10, color:"#555" }}>kcal</div>
-                          <div style={{ fontSize:14, fontWeight:600, color:"#fff", marginTop:4 }}>{meal.protein}g</div>
-                          <div style={{ fontSize:10, color:"#555" }}>protein</div>
+                        <div style={{ fontSize: isMobile ? 14 : 15, fontWeight:700, color:"#fff", marginBottom:8 }}>{meal.name}</div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                          {meal.items.map((it,j)=>(
+                            <span key={j} style={{ padding:"3px 8px", background:"#0D0D18", border:"1px solid #1A1A2E", borderRadius:20, fontSize: isMobile ? 10 : 11, color:"#aaa" }}>{it}</span>
+                          ))}
                         </div>
                       </div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <div style={{ fontSize: isMobile ? 16 : 18, fontWeight:700, color:g.color }}>{meal.calories}</div>
+                        <div style={{ fontSize:9, color:"#555" }}>kcal</div>
+                        <div style={{ fontSize: isMobile ? 13 : 14, fontWeight:600, color:"#fff", marginTop:4 }}>{meal.protein}g</div>
+                        <div style={{ fontSize:9, color:"#555" }}>protein</div>
+                      </div>
+                    </div>
 
-                      {/* Recipe Toggle */}
-                      <button onClick={()=>setRecipeOpen(recipeOpen===i?null:i)} className="btn" style={{ marginTop:12, padding:"7px 16px", borderRadius:8, border:`1px solid ${recipeOpen===i?g.color:"#1A1A2E"}`, background:recipeOpen===i?`${g.color}22`:"transparent", color:recipeOpen===i?g.color:"#666", fontSize:12, fontWeight:600 }}>
-                        {recipeOpen===i?"▲ Hide Recipe":"📖 View Recipe"}
-                      </button>
+                    {/* Recipe toggle */}
+                    <button onClick={()=>setRecipeOpen(recipeOpen===i?null:i)} className="btn" style={{
+                      marginTop:10, padding:"7px 14px", borderRadius:8,
+                      border:`1px solid ${recipeOpen===i?g.color:"#1A1A2E"}`,
+                      background:recipeOpen===i?`${g.color}22`:"transparent",
+                      color:recipeOpen===i?g.color:"#666", fontSize:12, fontWeight:600
+                    }}>
+                      {recipeOpen===i?"▲ Hide Recipe":"📖 View Recipe"}
+                    </button>
 
-                      {/* Recipe Panel */}
-                      {recipeOpen===i && meal.recipe && (
-                        <div className="recipe-panel" style={{ marginTop:14, background:"#0D0D18", borderRadius:12, padding:"18px 20px", border:`1px solid ${g.color}33` }}>
-                          <div style={{ display:"flex", gap:20, marginBottom:14 }}>
-                            {[{l:"Prep",v:meal.recipe.prepTime},{l:"Cook",v:meal.recipe.cookTime},{l:"Serves",v:meal.recipe.serves}].map((s,j)=>(
-                              <div key={j} style={{ background:"#11111E", borderRadius:8, padding:"8px 14px", textAlign:"center" }}>
-                                <div style={{ fontSize:13, fontWeight:700, color:g.color }}>{s.v}</div>
-                                <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{s.l}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{ fontSize:11, color:"#555", textTransform:"uppercase", letterSpacing:"2px", marginBottom:10 }}>Instructions</div>
-                          {meal.recipe.instructions.map((step,j)=>(
-                            <div key={j} style={{ display:"flex", gap:12, marginBottom:10 }}>
-                              <div style={{ width:22, height:22, borderRadius:6, background:`${g.color}22`, color:g.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0, marginTop:1 }}>{j+1}</div>
-                              <div style={{ fontSize:13, color:"#ccc", lineHeight:1.5 }}>{step}</div>
+                    {/* Recipe panel */}
+                    {recipeOpen===i && meal.recipe && (
+                      <div className="recipe-panel" style={{ marginTop:12, background:"#0D0D18", borderRadius:12, padding: isMobile ? "14px" : "18px 20px", border:`1px solid ${g.color}33` }}>
+                        <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+                          {[{l:"Prep",v:meal.recipe.prepTime},{l:"Cook",v:meal.recipe.cookTime},{l:"Serves",v:meal.recipe.serves}].map((s,j)=>(
+                            <div key={j} style={{ background:"#11111E", borderRadius:8, padding:"8px 12px", textAlign:"center", flex:1, minWidth:60 }}>
+                              <div style={{ fontSize:12, fontWeight:700, color:g.color }}>{s.v}</div>
+                              <div style={{ fontSize:9, color:"#555", textTransform:"uppercase", letterSpacing:1 }}>{s.l}</div>
                             </div>
                           ))}
-                          {meal.recipe.tip && (
-                            <div style={{ marginTop:14, padding:"10px 14px", background:`${g.color}14`, borderRadius:8, borderLeft:`3px solid ${g.color}`, fontSize:12, color:"#bbb" }}>
-                              💡 <strong style={{ color:g.color }}>Chef's Tip:</strong> {meal.recipe.tip}
-                            </div>
-                          )}
                         </div>
-                      )}
-                    </div>
+                        <div style={{ fontSize:10, color:"#555", textTransform:"uppercase", letterSpacing:"2px", marginBottom:10 }}>Instructions</div>
+                        {meal.recipe.instructions.map((step,j)=>(
+                          <div key={j} style={{ display:"flex", gap:10, marginBottom:10 }}>
+                            <div style={{ width:22, height:22, borderRadius:6, background:`${g.color}22`, color:g.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0, marginTop:1 }}>{j+1}</div>
+                            <div style={{ fontSize: isMobile ? 12 : 13, color:"#ccc", lineHeight:1.5 }}>{step}</div>
+                          </div>
+                        ))}
+                        {meal.recipe.tip && (
+                          <div style={{ marginTop:12, padding:"10px 12px", background:`${g.color}14`, borderRadius:8, borderLeft:`3px solid ${g.color}`, fontSize: isMobile ? 11 : 12, color:"#bbb" }}>
+                            💡 <strong style={{ color:g.color }}>Chef's Tip:</strong> {meal.recipe.tip}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
 
-              {/* Nutrition Panel */}
-              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                <div style={{ background:`linear-gradient(135deg,${g.color}16,${g.color}06)`, border:`1px solid ${g.color}44`, borderRadius:16, padding:22 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:g.color, textTransform:"uppercase", letterSpacing:"2px", marginBottom:16 }}>Week {currentWeek} Nutrition</div>
+              {/* Nutrition sidebar — shown below on mobile/tablet */}
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                <div style={{ background:`linear-gradient(135deg,${g.color}16,${g.color}06)`, border:`1px solid ${g.color}44`, borderRadius:16, padding: isMobile ? 16 : 22 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:g.color, textTransform:"uppercase", letterSpacing:"2px", marginBottom:14 }}>Week {currentWeek} Nutrition</div>
                   {[
                     { label:"Total Calories", val:totalCal,  target:g.calories, unit:"kcal" },
                     { label:"Total Protein",  val:totalProt, target:g.protein,  unit:"g" },
                   ].map((n,i)=>{
                     const pct=Math.min(100,Math.round(n.val/n.target*100));
                     return (
-                      <div key={i} style={{ marginBottom:18 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                      <div key={i} style={{ marginBottom:16 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
                           <span style={{ fontSize:12, color:"#aaa" }}>{n.label}</span>
                           <span style={{ fontSize:12, color:"#fff", fontWeight:700 }}>{n.val}{n.unit}</span>
                         </div>
                         <div style={{ height:7, background:"#1A1A2E", borderRadius:4 }}>
                           <div style={{ height:"100%", width:`${pct}%`, background:g.color, borderRadius:4, transition:"width .4s" }}/>
                         </div>
-                        <div style={{ fontSize:10, color:"#555", marginTop:3, textAlign:"right" }}>Target: {n.target}{n.unit}</div>
+                        <div style={{ fontSize:9, color:"#555", marginTop:2, textAlign:"right" }}>Target: {n.target}{n.unit}</div>
                       </div>
                     );
                   })}
                 </div>
-
-                <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding:20 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"2px", marginBottom:14 }}>Weekly Tips</div>
-                  {["🥤 Drink 3–4L water daily","🕐 Eat every 3–4 hours","🌙 No heavy carbs after 8pm","💊 Daily multivitamin","🥦 Half plate = vegetables","😴 8hrs sleep for recovery"].map((tip,i)=>(
-                    <div key={i} style={{ fontSize:12, color:"#aaa", padding:"8px 0", borderBottom:i<5?"1px solid #1A1A2E":"none" }}>{tip}</div>
+                <div style={{ background:"#11111E", border:"1px solid #1A1A2E", borderRadius:16, padding: isMobile ? 16 : 20 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"2px", marginBottom:12 }}>Daily Tips</div>
+                  {["🥤 Drink 3–4L water","🕐 Eat every 3–4 hours","🌙 No heavy carbs after 8pm","💊 Daily multivitamin","🥦 Half plate = veg","😴 8hrs sleep"].map((tip,i)=>(
+                    <div key={i} style={{ fontSize:12, color:"#aaa", padding:"7px 0", borderBottom:i<5?"1px solid #1A1A2E":"none" }}>{tip}</div>
                   ))}
                 </div>
               </div>
@@ -766,6 +900,30 @@ export default function FitnessApp() {
           </div>
         )}
       </div>
+
+      {/* ── MOBILE BOTTOM NAV ── */}
+      {isMobile && (
+        <div style={{
+          position:"fixed", bottom:0, left:0, right:0,
+          background:"#0C0C18", borderTop:"1px solid #1A1A2E",
+          display:"flex", zIndex:300, paddingBottom:"env(safe-area-inset-bottom, 0px)"
+        }}>
+          {[["overview","📋","Overview"],["workouts","🏋️","Workouts"],["meals","🥗","Meals"]].map(([t,icon,label])=>(
+            <button key={t} onClick={()=>setActiveTab(t)} className="btn" style={{
+              flex:1, padding:"12px 0 10px",
+              background:"transparent", border:"none",
+              color: activeTab===t ? g.color : "#555",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:3
+            }}>
+              <span style={{ fontSize:20 }}>{icon}</span>
+              <span style={{ fontSize:10, fontWeight:600, letterSpacing:"0.5px" }}>{label}</span>
+              {activeTab===t && (
+                <div style={{ width:20, height:2, background:g.color, borderRadius:2, marginTop:1 }}/>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
